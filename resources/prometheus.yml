@@ -1,0 +1,15 @@
+ #A scrape configuration scraping a Node Exporter and the Prometheus server
+ # itself.
+ scrape_configs:
+  # Scrape Prometheus itself every 5 seconds.
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape Prometheus itself every 5 seconds.
+  - job_name: 'sample'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+

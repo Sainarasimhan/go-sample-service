@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package valid;
+
+import "google/protobuf/descriptor.proto";
+option go_package = "./pb;pb";
+
+//To be Extended with more custom validators
+extend google.protobuf.FieldOptions {
+    bool required = 50000;
+    int32 min = 50001;
+    int32 max = 50002;
+    int32 lmin = 50003;
+    int32 lmax = 50004;
+    StringList allowed = 50005;
+}
+
+message StringList {
+	repeated string list = 1;
+}

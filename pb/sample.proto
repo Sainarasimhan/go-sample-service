@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package pb;
+
+import "pb/valid.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "./pb";
+
+message CreateRequest {
+    int32 ID       = 1 [(valid.required) = true];
+    string Param1  = 2 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 10];
+    string Param2  = 3 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 50];
+    string Param3  = 4 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 100];
+    string TransID = 5 [(valid.required) = true];
+}
+
+message ListRequest {
+    int32 ID       = 1 [(valid.required) = true];
+    string TransID = 2 [(valid.required) = true];
+}
+
+message Detail {
+    int32 ID = 1;
+    string Param1 = 2;
+    string Param2 = 3;
+    string Param3 = 4;
+}
+
+message Details {
+    repeated Detail Dtl = 1;
+}
+
+
+service Sample {
+    rpc Create (CreateRequest) returns(google.protobuf.Empty) {}
+    rpc List (ListRequest) returns(Details) {}
+    rpc ListStream (ListRequest) returns (stream Detail) {}
+}

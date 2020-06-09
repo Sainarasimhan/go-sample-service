@@ -1,0 +1,36 @@
+#All Config Params can be passed from env vars
+Sample:
+  Concurrent-Writes: 10
+  http-API:
+      Name: "localhost"
+      Port: 9085 
+      Secure: false
+      Cert: 
+      Key:
+      #Log:
+      # Level: "Info"
+      # Prefix: "http" 
+  grpc-API:
+      Name: "localhost"
+      Port: 8085
+      Secure: false
+      Cert:
+      Key:
+  Prom-API:
+      Name: ""
+      Port: 8080
+      Secure: false
+      Cert: 
+      Key:
+  Zipkin-API:
+      Name: 
+      Port: 
+      URL:  "http://host.docker.internal:9412/api/v2/spans"
+      Secure: false
+      Cert:
+      Key:
+  Log:
+      Level: "Debug"
+      Prefix: "Sample"
+
+

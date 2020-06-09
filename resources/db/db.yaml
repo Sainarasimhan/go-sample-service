@@ -1,0 +1,10 @@
+DB:
+  Driver: "postgres"
+  #HostName: "localhost"
+  #Docker Config
+  HostName: "host.docker.internal"
+  Database: "postgres"
+  Port: "5432"
+  UserName: "postgres"
+  Password: "postgres"
+  MaxConnections: 10
