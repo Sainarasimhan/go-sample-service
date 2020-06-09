@@ -1,1 +1,1 @@
-sample grpc client to test gRPC calls.
+sample client functionality to test gRPC calls.
