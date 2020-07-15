@@ -2,9 +2,10 @@ package transport
 
 import (
 	"context"
-	"sample/pb"
-	"sample/pkg/endpoints"
-	"sample/pkg/service"
+
+	"github.com/Sainarasimhan/sample/pb"
+	"github.com/Sainarasimhan/sample/pkg/endpoints"
+	"github.com/Sainarasimhan/sample/pkg/service"
 
 	svcerr "github.com/Sainarasimhan/go-error/err"
 	"github.com/golang/protobuf/ptypes/empty"

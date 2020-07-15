@@ -17,7 +17,7 @@ import (
 	"errors"
 	"fmt"
 
-	valid "sample/pb"
+	valid "github.com/Sainarasimhan/sample/pb"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"

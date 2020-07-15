@@ -29,6 +29,12 @@ Sample:
       Secure: false
       Cert:
       Key:
+  GCP-PubSub:
+      Enable: true
+      Project-ID: "my-gke-36"
+      Topic: "sample-notify" 
+      Subscription: "sample-go"
+ # ErrorReportProject: "my-gke-36"
   Log:
       Level: "Debug"
       Prefix: "Sample"

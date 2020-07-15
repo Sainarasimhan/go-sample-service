@@ -33,12 +33,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"sample/pb"
-	config "sample/pkg/cfg"
-	"sample/pkg/endpoints"
-	repo "sample/pkg/repository"
-	"sample/pkg/service"
-	transport "sample/pkg/transport"
+	"github.com/Sainarasimhan/sample/pb"
+	config "github.com/Sainarasimhan/sample/pkg/cfg"
+	"github.com/Sainarasimhan/sample/pkg/endpoints"
+	repo "github.com/Sainarasimhan/sample/pkg/repository"
+	"github.com/Sainarasimhan/sample/pkg/service"
+	transport "github.com/Sainarasimhan/sample/pkg/transport"
 
 	log "github.com/Sainarasimhan/Logger"
 	"google.golang.org/grpc"
@@ -181,19 +181,24 @@ func main() {
 		}
 	}
 
-	var reqLatency metric.Float64ValueRecorder
+	var (
+		reqLatency metric.Float64ValueRecorder
+		dbMetrics  repo.Metrics
+	)
 	{
-		if reqLatency, err = global.Meter("sample").NewFloat64ValueRecorder("Request Latency"); err != nil {
-			lg.Error("Action", "MetricsCreation")("Error creating Metrics %s", err.Error())
+		{
+			if reqLatency, err = global.Meter("sample").NewFloat64ValueRecorder("Request Latency"); err != nil {
+				lg.Error("Action", "MetricsCreation")("Error creating Metrics %s", err.Error())
+			}
 		}
-	}
 
-	var dbMetrics repo.Metrics
-	{
-		batchObserver := global.Meter("Sampple-DB").NewBatchObserver(dbMetrics.DoMetrics())
-		dbMetrics.OpenCnx, _ = batchObserver.NewInt64ValueObserver("Opne DB Connections")
-		dbMetrics.IdleCnx, _ = batchObserver.NewInt64ValueObserver("Idle DB Connections")
-		dbMetrics.IdelClosed, _ = batchObserver.NewInt64SumObserver("Idle Close DB Connections")
+		var dbMetrics repo.Metrics
+		{
+			batchObserver := global.Meter("Sampple-DB").NewBatchObserver(dbMetrics.DoMetrics())
+			dbMetrics.OpenCnx, _ = batchObserver.NewInt64ValueObserver("Opne DB Connections")
+			dbMetrics.IdleCnx, _ = batchObserver.NewInt64ValueObserver("Idle DB Connections")
+			dbMetrics.IdelClosed, _ = batchObserver.NewInt64SumObserver("Idle Close DB Connections")
+		}
 	}
 
 	// Create Main components of service,
@@ -211,13 +216,31 @@ func main() {
 		}
 	}
 
+	// Create Publish Event to push notifications
+	psCfg := transport.PubSubCfg{
+		ProjectID:    cfg.Sample.PS.ProjectID,
+		Topic:        cfg.Sample.PS.Topic,
+		Subscription: cfg.Sample.PS.Subscription}
+	pubClnt := transport.NewPublishClient(lg, psCfg)
+
+	// Setup GCP Error Reporting client
+	erClient := service.NewErrorReportingClient(cfg.Sample.ErrRprtPrjID, lg)
+
 	// Create Service, Endpoints and Transport Handlers
 	// service created is passed to endpoints,
 	// endpoints is passed to transport handlers, along with other dependencies.
-	svc, _ := service.New(lg, db, service.SetAsyncWorkers(5), service.SetCounters(reqCreateSvc, reqListSvc))
+	svc, _ := service.New(lg, db,
+		service.SetAsyncWorkers(5),
+		service.SetCounters(reqCreateSvc, reqListSvc),
+		service.SetPublishEvent(pubClnt),
+		service.SetErrorReportingClient(erClient),
+	)
 	endpoint := endpoints.New(svc, lg, reqLatency)
-	httpHndlr := http.TimeoutHandler(transport.NewHTTPHandler(endpoint, otTracer), transport.Timeout, transport.TimeoutError)
+	httpHndlr := http.TimeoutHandler(transport.NewHTTPHandler(endpoint, otTracer),
+		transport.Timeout,
+		transport.TimeoutError)
 	grpcHndlr := transport.NewGRPCServer(endpoint)
+	subClnt := transport.NewSub(psCfg, lg, endpoint) // Create PubSub client to listen for events
 
 	// Now we're to the part of the func main where we want to start actually
 	// running things, like servers bound to listeners to receive connections.
@@ -331,6 +354,17 @@ func main() {
 		})
 	}
 	{
+		// Start PubSub Client
+		if cfg.Sample.PS.Enabled && subClnt != nil {
+			g.Add(func() error {
+				return subClnt.Receive()
+			}, func(error) {
+				lg.Debug()("Closing pubsub")
+				subClnt.Close()
+			})
+		}
+	}
+	{
 		// This function just sits and waits for ctrl-C.
 		cancelInterrupt := make(chan struct{})
 		g.Add(func() error {
@@ -376,7 +410,6 @@ func main() {
 	}
 
 	lg.Info("exit", g.Run().Error())
-
 }
 
 func usageFor(fs *flag.FlagSet, short string) func() {

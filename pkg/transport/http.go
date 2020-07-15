@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"sample/pb"
-	"sample/pkg/endpoints"
+	"github.com/Sainarasimhan/sample/pb"
+	"github.com/Sainarasimhan/sample/pkg/endpoints"
 
 	svcerr "github.com/Sainarasimhan/go-error/err"
 	httptransport "github.com/go-kit/kit/transport/http"

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"runtime/pprof"
-	"sample/pkg/service"
 	"time"
+
+	"cloud.google.com/go/pubsub"
+	"github.com/Sainarasimhan/sample/pkg/service"
 
 	log "github.com/Sainarasimhan/Logger"
 	"github.com/go-kit/kit/circuitbreaker"
@@ -109,11 +111,26 @@ func MakeListEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
-//Endpoints - holds the endpoints
+// Endpoints - holds the endpoints
 type Endpoints struct {
 	Create      endpoint.Endpoint
 	CreateAsync endpoint.Endpoint
 	List        endpoint.Endpoint
+	Pub         endpoint.Endpoint
+}
+
+// Do - Implement Publish Events
+func (e *Endpoints) Publish(ctx context.Context, evt service.Event) error {
+
+	// Covert service event into PubSub Message
+	attr := make(map[string]string, 1)
+	attr["Param1"] = evt.Param1 // Map attributes
+	m := pubsub.Message{
+		Data:       []byte(evt.Msg),
+		Attributes: attr,
+	}
+	_, err := e.Pub(ctx, &m)
+	return err
 }
 
 // helper func to capture memprofile, currently not used

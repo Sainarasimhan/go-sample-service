@@ -28,8 +28,12 @@ type SampleCfg struct {
 	Prometheus APICfg `yaml:"Prom-API"`
 	//Zipkin Config
 	Zipkin APICfg `yaml:"Zipkin-API"`
+	//PubSub config
+	PS SubCfg `yaml:"GCP-PubSub"`
 	//Concurrent Writes
 	ConcurrentWrites int `yaml:"Concurrent-Writes"`
+	// Error reporting
+	ErrRprtPrjID string `yaml:"ErrorReportProject" valid:"optional"`
 	//Log servicelog.Cfg `yaml:"Log"`
 }
 
@@ -51,6 +55,15 @@ type APICfg struct {
 	TLSKey string `yaml:"Key" valid:"optional"`
 	// API specific log
 	//Log servicelog.Cfg `yaml:"Log"`
+}
+
+//SubCfg - Config related to GCP pub/sub
+type SubCfg struct {
+	ProjectID    string `yaml:"Project-ID" valid:"optional"`
+	Topic        string `yaml:"Topic" valid:"optional"`
+	Subscription string `yaml:"Subscription" valid:"optional"`
+	Enabled      bool   `yaml:"Enable" valid:"required"`
+	// Time out and ack config to be added
 }
 
 //DBCfg - Config related to DB connectivity

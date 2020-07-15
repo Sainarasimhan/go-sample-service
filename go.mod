@@ -3,6 +3,8 @@ module github.com/Sainarasimhan/sample
 go 1.13
 
 require (
+	cloud.google.com/go v0.46.3
+	cloud.google.com/go/pubsub v1.0.1
 	github.com/Sainarasimhan/Logger v0.0.0-20200529144005-d598545dd86a
 	github.com/Sainarasimhan/go-error v0.0.0-20200609165450-83267493c917
 	github.com/asaskevich/govalidator v0.0.0-20200428143746-21a406dcc535

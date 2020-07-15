@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"sample/pb"
-	"sample/pkg/validator"
+	"github.com/Sainarasimhan/sample/pb"
+	"github.com/Sainarasimhan/sample/pkg/validator"
 
 	svcerr "github.com/Sainarasimhan/go-error/err"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

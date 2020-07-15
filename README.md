@@ -16,3 +16,9 @@
  - Add Testing for individual packages 
  - More Documentation 
  - Improve Error Handling for dependencies
+
+## Notes 
+ - Pub/Sub - Setup Google cloud account details to use pub/sub functionality
+ - GCP Error Reporting - Setup GCP account to use error reporting
+   - GOOGLE_APPLICATION_CREDENTIALS env var should be set with service account details
+ - Protobuf generation - use make.sh to generate protobuf and grpc packages.

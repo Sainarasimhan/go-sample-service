@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
-	"sample/pb"
+	"github.com/Sainarasimhan/sample/pb"
 	"time"
 
 	"google.golang.org/grpc"

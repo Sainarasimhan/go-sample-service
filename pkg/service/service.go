@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strconv"
 
+	"cloud.google.com/go/errorreporting"
 	log "github.com/Sainarasimhan/Logger"
 	svcerr "github.com/Sainarasimhan/go-error/err"
+	repo "github.com/Sainarasimhan/sample/pkg/repository"
 	"go.opentelemetry.io/otel/api/metric"
 
-	"sample/pb"
-	Repo "sample/pkg/repository"
-	repo "sample/pkg/repository"
+	"github.com/Sainarasimhan/sample/pb"
+	Repo "github.com/Sainarasimhan/sample/pkg/repository"
 )
 
 //Service - interface defines the core service
@@ -19,6 +20,11 @@ type Service interface {
 	Create(context.Context, CreateRequest) error
 	CreateAsync(context.Context, CreateRequest) error
 	List(context.Context, ListRequest) (Details, error)
+}
+
+// Publisher - interface to send domain events
+type Publisher interface {
+	Publish(context.Context, Event) error
 }
 
 //ListRequest - Request for List
@@ -36,10 +42,18 @@ type CreateRequest struct {
 	*pb.CreateRequest
 }
 
+// Event - Structure to send event update
+type Event struct {
+	Msg    string
+	Param1 string
+}
+
 // type implementing Service and holds all data for performing business logic
 type sampleService struct {
 	Repo.Repository
+	Publisher
 	*log.Logger
+	er                 *errorreporting.Client
 	conWrkrs           int
 	createCh           chan (CreateRequest)
 	createCnt, listCnt metric.BoundInt64Counter
@@ -67,7 +81,7 @@ func New(lg *log.Logger, repo Repo.Repository, opt ...Option) (Service, error) {
 	}
 
 	//Setup Middleware
-	svc := ErrorMiddleware(lg)(&s)
+	svc := ErrorMiddleware(lg, s.er)(&s)
 	svc = InstrumentingMiddleware(s.createCnt, s.listCnt)(svc)
 
 	s.Info("Action", "NewService")("created new service type")
@@ -88,6 +102,20 @@ func SetCounters(reqCreate, reqList metric.BoundInt64Counter) Option {
 	}
 }
 
+//SetPublishEvent - sets svc to publish events
+func SetPublishEvent(p Publisher) Option {
+	return func(s *sampleService) {
+		s.Publisher = p
+	}
+}
+
+//SetErrorReportingClient - sets client to do GCP error reporting
+func SetErrorReportingClient(e *errorreporting.Client) Option {
+	return func(s *sampleService) {
+		s.er = e
+	}
+}
+
 /* Interface Implementation */
 // Create - Function creates new entries
 func (s *sampleService) Create(ctx context.Context, cr CreateRequest) error {
@@ -99,6 +127,11 @@ func (s *sampleService) Create(ctx context.Context, cr CreateRequest) error {
 		return err
 	}
 	s.Info("req", cr.String())("Successfuly Created entry")
+
+	//Publish Create Event
+	if s.Publisher != nil {
+		s.Publisher.Publish(ctx, cr.publishMsg())
+	}
 	return nil
 
 }
@@ -118,16 +151,13 @@ func (s *sampleService) CreateAsync(ctx context.Context, cr CreateRequest) error
 // Async workers to create entries
 func (s *sampleService) crWorkers() {
 	for cr := range s.createCh {
-
-		rReq := cr.repoRequest()
 		s.Debug("req", cr.String())("Received Request from Async channel")
-
-		_, err := s.Insert(context.Background(), rReq) //TODO add timeout in contexts
-
-		if err != nil {
-			s.Error("req", cr.String())("Error in Creating entry - %s", err.Error())
+		if err := s.Create(context.Background(), cr); err != nil {
+			// Report error happened during async creation
+			if s.er != nil {
+				s.er.Report(errorreporting.Entry{Error: err})
+			}
 		}
-		s.Info("req", cr.String())("Successfuly Created entry")
 	}
 }
 
@@ -171,6 +201,13 @@ func (cr *CreateRequest) repoRequest() repo.Request {
 func (cr *CreateRequest) String() string {
 	return fmt.Sprintf("ID=%d,TID=%s", cr.GetID(), cr.GetTransID())
 
+}
+
+func (cr *CreateRequest) publishMsg() Event {
+	return Event{
+		Msg:    "New Entry Created", //Pass ID & relavent info
+		Param1: cr.Param1,
+	}
 }
 
 func (lr *ListRequest) repoRequest() repo.Request {
