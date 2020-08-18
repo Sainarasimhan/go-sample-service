@@ -33,8 +33,15 @@ jobs:
         wire gen -output_file_prefix main- cmd/main.go
         go build cmd/main-wire_gen.go
         
-
+    #- name: Vet
+    #  run: go vet ./...
+      
     - name: Test
       run: |
         go generate test/test.go
         go test test/sample_test.go test/wire_gen.go
+        
+    - name: Run Gosec Security Scanner
+      uses: securego/gosec@master
+      with:
+        args: ./...
