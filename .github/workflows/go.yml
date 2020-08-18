@@ -30,7 +30,7 @@ jobs:
 
     - name: Build
       run: |
-        wire gen -output_file_prefix main- main.go
+        wire gen -output_file_prefix main- cmd/main.go
         go build cmd/main-wire_gen.go
         
 
