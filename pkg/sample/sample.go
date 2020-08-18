@@ -321,6 +321,7 @@ type FunctionsList []SampleFunction
 func ProvideHTTPTransport(e endpoints.Endpoints, deps BaseDependencies) (HTTPTransport, error) {
 	// The HTTP listener mounts the Go kit HTTP handler we created.
 	var (
+		ctx         = context.Background()
 		httpCfg     = deps.Sample.HTTP
 		httpAddress = httpCfg.Address()
 		httpHndlr   = http.TimeoutHandler(
@@ -340,7 +341,7 @@ func ProvideHTTPTransport(e endpoints.Endpoints, deps BaseDependencies) (HTTPTra
 	}
 
 	startFn := func() error {
-		lg.Infow(ctx, "Address", httpAddress, "msg", "starting HTTP server ...")
+		deps.Infow(ctx, "Address", httpAddress, "msg", "starting HTTP server ...")
 		if httpCfg.Secure {
 			deps.Info(context.Background(), "Am I ")
 			return srv.ListenAndServeTLS(httpCfg.TLSCert, httpCfg.TLSKey)
@@ -349,7 +350,7 @@ func ProvideHTTPTransport(e endpoints.Endpoints, deps BaseDependencies) (HTTPTra
 	}
 
 	shutDownFn := func() {
-		lg.Infow(ctx, "msg", "Shutting Down HTTP Handler")
+		deps.Infow(ctx, "msg", "Shutting Down HTTP Handler")
 		sdctx, sdcancel := context.WithTimeout(context.Background(), 60*time.Second)
 		// wait for 60 seconds max
 		defer sdcancel()
@@ -446,6 +447,7 @@ func ProvideDebugHndlr(deps BaseDependencies) (dt DebugTransport, err error) {
 			return http.Serve(debugListener, http.DefaultServeMux)
 		},
 		Shutdown: func() {
+			deps.Infow(ctx, "msg", "Shutting down HTTP(debug) server ...")
 			debugListener.Close()
 		},
 	}
@@ -464,13 +466,14 @@ func ProvideSubsClient(deps BaseDependencies, e endpoints.Endpoints) (s PubSubTr
 		Start: func() error {
 			// Start PubSub Client
 			if deps.Sample.PS.Enabled {
-				lg.Debugw(ctx, "Closing pubsub %s", err.Error())
+				lg.Debugw(ctx, "msg", "Listening on pubsub %s", deps.Sample.PS.SubURL)
 				return subClnt.Receive()
 			}
 			return nil
 		},
 		Shutdown: func() {
 			if subClnt.Subscription != nil {
+				lg.Debugw(ctx, "Closing pubsub")
 				subClnt.Subscription.Shutdown(context.Background())
 			}
 		},
