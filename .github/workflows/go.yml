@@ -36,5 +36,5 @@ jobs:
 
     - name: Test
       run: |
-        go test generate test/test.go
+        go generate test/test.go
         go test test/sample_test.go
