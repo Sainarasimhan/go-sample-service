@@ -45,6 +45,7 @@ jobs:
     - uses: shogo82148/actions-goveralls@v1
       with:
         path-to-profile: profile.cov
+        working-directory: /home/runner/work/go-sample-service/go-sample-service/  
         
     - name: Run Gosec Security Scanner
       uses: securego/gosec@master
