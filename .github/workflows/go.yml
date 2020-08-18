@@ -37,4 +37,4 @@ jobs:
     - name: Test
       run: |
         go generate test/test.go
-        go test test/sample_test.go
+        go test test/sample_test.go test/wire_gen.go
