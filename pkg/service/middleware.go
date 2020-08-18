@@ -7,12 +7,13 @@ import (
 	"cloud.google.com/go/errorreporting"
 	log "github.com/Sainarasimhan/Logger"
 	svcerr "github.com/Sainarasimhan/go-error/err"
+	newlog "github.com/Sainarasimhan/sample/pkg/log"
 	"go.opentelemetry.io/otel/api/metric"
 )
 
 type errorMiddleware struct {
 	next Service
-	*log.Logger
+	newlog.Logger
 	*errorreporting.Client
 }
 
@@ -25,7 +26,7 @@ type middleware func(Service) Service
 
 // ErrorMiddleware - Middleware to return uniform error types based of rpc codes.
 // Does Error reporting, if enabled
-func ErrorMiddleware(lg *log.Logger, e *errorreporting.Client) middleware {
+func ErrorMiddleware(lg newlog.Logger, e *errorreporting.Client) middleware {
 	return func(next Service) Service {
 		return &errorMiddleware{next: next, Logger: lg, Client: e}
 	}
@@ -62,7 +63,7 @@ func (e *errorMiddleware) List(ctx context.Context, lr ListRequest) (D Details, 
 func (e *errorMiddleware) handleError(err *error, report bool) {
 	// Handle Panics created by service layer
 	if msg := recover(); msg != nil {
-		e.Error("Panic", "handler")("panic received %v", msg)
+		e.Error(context.Background(), "Panic", "handler", "panic received %v", msg)
 		*err = svcerr.InternalErr(fmt.Sprintf("Panic handling request, error - %s", msg))
 		report = true // report error in case of panic
 	}
@@ -82,7 +83,7 @@ func (e *errorMiddleware) handleError(err *error, report bool) {
 }
 
 // NewErrorReportingClient Create Error reporting Client, pass GCP project ID
-func NewErrorReportingClient(projectID string, lg *log.Logger) *errorreporting.Client {
+func NewErrorReportingClient(lg *log.Logger, projectID string) *errorreporting.Client {
 	if projectID == "" {
 		return nil // Don't create client for zero values
 	}

@@ -32,6 +32,7 @@ func NewHTTPHandler(endpoints endpoints.Endpoints, tracer trace.Tracer) http.Han
 	options := []httptransport.ServerOption{
 		HTTPOpenTMTrace(tracer),
 		httptransport.ServerErrorEncoder(errorEncoder),
+		httptransport.ServerBefore(SetHTTPLogContext),
 	}
 	m := mux.NewRouter()
 	m.Methods(http.MethodPost).Path("/create").
@@ -59,7 +60,7 @@ func NewHTTPHandler(endpoints endpoints.Endpoints, tracer trace.Tracer) http.Han
 }
 
 // DecodeCreateRequest - Decodes Json from request body and validates the requests
-func DecodeCreateRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func DecodeCreateRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	var (
 		req endpoints.CreateRequest
 		msg = &pb.CreateRequest{}
@@ -71,6 +72,10 @@ func DecodeCreateRequest(_ context.Context, r *http.Request) (interface{}, error
 	if err = ValidateRequest(msg); err != nil {
 		return req, err
 	}
+
+	//Set Log Context?
+	UpdateHTTPLogContext(ctx, msg.GetTransID(), CREATE)
+
 	//Assign the Protobuf message to request
 	req.Cr.CreateRequest = msg
 
@@ -84,7 +89,7 @@ func EncodeCreateResponse(_ context.Context, w http.ResponseWriter, response int
 }
 
 // DecodeListRequest - Decodes List GET request
-func DecodeListRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func DecodeListRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	var (
 		req endpoints.ListRequest
 		msg = &pb.ListRequest{}
@@ -98,6 +103,9 @@ func DecodeListRequest(_ context.Context, r *http.Request) (interface{}, error) 
 	if err = ValidateRequest(msg); err != nil {
 		return req, err
 	}
+
+	//Set Log Context?
+	UpdateHTTPLogContext(ctx, msg.GetTransID(), LIST)
 	//Assign the Protobuf message to request
 	req.Lr.ListRequest = msg
 	return req, err

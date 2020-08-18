@@ -9,8 +9,8 @@ import (
 	"errors"
 	"strconv"
 
-	log "github.com/Sainarasimhan/Logger"
 	svcerr "github.com/Sainarasimhan/go-error/err"
+	log "github.com/Sainarasimhan/sample/pkg/log"
 	"go.opentelemetry.io/otel/api/kv"
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/trace"
@@ -66,12 +66,12 @@ type Metrics struct {
 	IdleCnx    metric.Int64ValueObserver
 	IdelClosed metric.Int64SumObserver
 	db         *sql.DB
-	*log.Logger
+	log.Logger
 }
 
 //PostgresDB - Implementation of Repository with Postgres DB
 type PostgresDB struct {
-	*log.Logger
+	log.Logger
 	db       *sql.DB
 	maxConns int
 	st       stmts
@@ -128,9 +128,10 @@ func EnableMetrics(m *Metrics) PostgresOption {
 }
 
 //NewPostgres - Creates new instance which implementes Repository
-func NewPostgres(connStr string, lg *log.Logger, options ...PostgresOption) (repo Repository, err error) {
+func NewPostgres(connStr string, lg log.Logger, options ...PostgresOption) (repo Repository, err error) {
 	connStr = connStr + " connect_timeout=5"
-	lg.Debug("Action", "NewDB", "connStr", connStr)("New DB requested")
+	ctx := context.Background()
+	lg.Debugw(ctx, "Action", "NewDB", "connStr", connStr, "msg", "New DB requested")
 	p := &PostgresDB{
 		Logger:   lg,
 		maxConns: 5, //Default max conns
@@ -138,7 +139,7 @@ func NewPostgres(connStr string, lg *log.Logger, options ...PostgresOption) (rep
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		lg.Error("Action", "connect", "db", "postgres")(err.Error())
+		lg.Errorw(ctx, "Action", "connect", "db", "postgres", "err", err)
 		return nil, svcerr.Wrap("Error opening Database", err)
 	}
 	p.db = db
@@ -155,11 +156,11 @@ func NewPostgres(connStr string, lg *log.Logger, options ...PostgresOption) (rep
 	p.createTable() //Ignore any error
 
 	if err := p.prepareStmts(); err != nil {
-		lg.Error("Action", "PrepareStmts")("Failred preparing Stmts")
+		lg.Errorw(ctx, "Action", "PrepareStmts", "msg", "Failred preparing Stmts")
 		//Ignore any error
 	}
 
-	lg.Info("Action", "NewDB")("New DB service created")
+	lg.Infow(ctx, "Action", "NewDB", "msg", "New DB service created")
 	repo = CommonMiddleware(lg, p.ot)(p) //Wrap repo with Error Middelware
 
 	return
@@ -167,20 +168,21 @@ func NewPostgres(connStr string, lg *log.Logger, options ...PostgresOption) (rep
 
 // prepare statments and uses during actual calls
 func (p *PostgresDB) prepareStmts() (err error) {
+	ctx := context.Background()
 	if p.db == nil {
-		p.Error("Action", "PrepareStmt")("DB Connection Not available")
+		p.Errorw(ctx, "Action", "PrepareStmt", "msg", "DB Connection Not available")
 		return errors.New("DB Connection Not Available")
 	}
 
 	for op, st := range dbstmts {
 		if st.stmt, err = p.db.Prepare(st.query); err != nil {
-			p.Error("Action", "PrepareStmt", "stmt", op)(err.Error())
+			p.Errorw(ctx, "Action", "PrepareStmt", "stmt", op, "err", err)
 			return
 		}
 		dbstmts[op] = st
-		p.Debug("stmt", op)("Statement Prepared")
+		p.Debugw(ctx, "stmt", op, "msg", "Statement Prepared")
 	}
-	p.Info("Action", "PrepareStmt")("All Statement Prepared Successfully")
+	p.Infow(ctx, "Action", "PrepareStmt", "msg", "All Statement Prepared Successfully")
 	p.st = dbstmts
 
 	return nil
@@ -189,15 +191,16 @@ func (p *PostgresDB) prepareStmts() (err error) {
 // Function to create Table, can be used for initial setup
 func (p *PostgresDB) createTable() (err error) {
 
+	ctx := context.Background()
 	if _, err = p.db.Exec(`CREATE TABLE SampleTable (ID int,
 		Param1 varchar(50), 
 		Param2 varchar(100),  
 		Param3 varchar(100));`); err != nil {
 		//Ignore the error, but log it
-		p.Error("Stmt", "Create")(err.Error())
+		p.Errorw(ctx, "Stmt", "Create", "err", err)
 		return
 	}
-	p.Info("Stmt", "Create")("Created Table")
+	p.Infow(ctx, "Stmt", "Create", "msg", "Created Table")
 	return
 }
 
@@ -206,6 +209,7 @@ func (p *PostgresDB) validateDBConn() error {
 	if p.db == nil {
 		return svcerr.InternalErr("Database Not Initialized")
 	}
+	ctx := context.Background()
 
 	/*if err := p.db.Ping(); err != nil {
 		p.Error("action", "ping")(err.Error())
@@ -214,17 +218,17 @@ func (p *PostgresDB) validateDBConn() error {
 
 	if p.st != nil {
 		if err := p.st.isValid(); err != nil {
-			p.Error("Action", "ping")(err.Error())
+			p.Errorw(ctx, "Action", "ping", "err", err)
 			return svcerr.Wrap("DB Statments Error", err)
 		}
 	} else {
 		if err := p.prepareStmts(); err != nil {
-			p.Error("Action", "ping-PrepareStmts")(err.Error())
+			p.Errorw(ctx, "Action", "ping-PrepareStmts", "err", err)
 			return errors.New("DB Statements Error/UnAvailable")
 		}
 	}
 
-	p.Debug("Action", "Ping", "DB status", "OK")
+	p.Debugw(ctx, "Action", "Ping", "DB status", "OK")
 	return nil
 }
 
@@ -237,13 +241,13 @@ func (p *PostgresDB) genericStmtExec(ctx context.Context, op string, args ...int
 
 	res, err := p.st[op].stmt.ExecContext(ctx, args...)
 	if err != nil {
-		p.Error("req", fmt.Sprintf("%+v", args), "Action", op)(err.Error())
+		p.Errorw(ctx, "Action", op, "err", err)
 		err = svcerr.Wrap("DB "+op+" Failure", err)
 		return
 	}
 
 	ra, _ := res.RowsAffected()
-	p.Info("req", fmt.Sprintf("%+v", args), "RowsAffected", strconv.Itoa(int(ra)), "Action", op)("Successful operation")
+	p.Infow(ctx, "RowsAffected", strconv.Itoa(int(ra)), "Action", op, "msg", "Successful operation")
 
 	return
 }
@@ -272,10 +276,9 @@ func (p *PostgresDB) List(ctx context.Context, r Request) (list []Details, err e
 		return
 	}
 
-	idStr := strconv.Itoa(r.ID)
 	rows, err := p.st[LIST].stmt.QueryContext(ctx, r.ID)
 	if err != nil {
-		p.Error("req", idStr, "Action", LIST)(err.Error())
+		p.Error(ctx, err)
 		err = svcerr.Wrap("DB Select Failure", err)
 		return
 	}
@@ -283,14 +286,14 @@ func (p *PostgresDB) List(ctx context.Context, r Request) (list []Details, err e
 	for rows.Next() {
 		d := Details{}
 		if err = rows.Scan(&d.ID, &d.Param1, &d.Param2, &d.Param3); err != nil {
-			p.Error("req", idStr, "Action", LIST)("Error Scanning rows %s", err.Error())
+			p.Errorw(ctx, "Error Scanning rows", err)
 			return
 		}
 		list = append(list, d)
 	}
 	rows.Close()
 
-	p.Info("req", idStr, "Action", LIST)("Retrieved list of (%d) rows", len(list))
+	p.Infow(ctx, "Retrieved rows", len(list))
 	return list, err
 }
 
@@ -322,6 +325,6 @@ func (m *Metrics) DoMetrics() metric.BatchObserverCallback {
 			m.IdelClosed.Observation(int64(stats.MaxIdleClosed)),
 			m.IdleCnx.Observation(int64(stats.Idle)),
 		)
-		m.Debug("DB", "Metrics")("%+v", stats)
+		m.Debugw(ctx, "DB", "Metrics", "msg", stats)
 	}
 }

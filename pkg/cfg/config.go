@@ -29,12 +29,13 @@ type SampleCfg struct {
 	//Zipkin Config
 	Zipkin APICfg `yaml:"Zipkin-API"`
 	//PubSub config
-	PS SubCfg `yaml:"GCP-PubSub"`
+	PS PubSubCfg `yaml:"PubSub"`
 	//Concurrent Writes
 	ConcurrentWrites int `yaml:"Concurrent-Writes"`
 	// Error reporting
 	ErrRprtPrjID string `yaml:"ErrorReportProject" valid:"optional"`
-	//Log servicelog.Cfg `yaml:"Log"`
+	// Log config
+	Log LogCfg `yaml:"Log"`
 }
 
 //APICfg - Config for each API server
@@ -53,17 +54,21 @@ type APICfg struct {
 	TLSCert string `yaml:"Cert" valid:"optional"`
 	// cert Key
 	TLSKey string `yaml:"Key" valid:"optional"`
-	// API specific log
-	//Log servicelog.Cfg `yaml:"Log"`
 }
 
-//SubCfg - Config related to GCP pub/sub
-type SubCfg struct {
-	ProjectID    string `yaml:"Project-ID" valid:"optional"`
-	Topic        string `yaml:"Topic" valid:"optional"`
-	Subscription string `yaml:"Subscription" valid:"optional"`
-	Enabled      bool   `yaml:"Enable" valid:"required"`
+//PubSubCfg - Config related to GCP pub/sub
+type PubSubCfg struct {
+	SubURL  string `yaml:"SubURL" valid:"optional"`
+	PubURL  string `yaml:"PubURL" valid:"optional"`
+	Enabled bool   `yaml:"Enable" valid:"required"`
 	// Time out and ack config to be added
+}
+
+// LogCfg - Config for Logging
+type LogCfg struct {
+	Level  string `yaml:"Level" valid:"required"` // Add Validation on levels
+	Format string `yaml:"Format" valid:"alphanum, required"`
+	Name   string `yaml:"Name" valid:"alphanum"`
 }
 
 //DBCfg - Config related to DB connectivity
@@ -76,6 +81,7 @@ type DBCfg struct {
 	UID      string `config:"UserName" valid:"alphanum, required"`
 	Pwd      string `config:"Password" valid:"alphanum, required"`
 	MaxConns int    `config:"MaxConnections" valid:"numeric, required"`
+	Log      LogCfg `config:"Log"`
 }
 
 //Init - Func to init cfg by reading config files
@@ -95,6 +101,7 @@ func getSvcCfg(cfg *Cfg) (err error) {
 	viper.SetConfigName("application")
 	viper.AddConfigPath("./resources/")
 	viper.AddConfigPath("../resources/")
+	viper.AddConfigPath("../../resources/")
 
 	err = viper.ReadInConfig()
 	if err != nil {
@@ -132,6 +139,7 @@ func getDBCfg(cfg *Cfg) (err error) {
 	// Read from DB2 file
 	dbCfg.SetConfigName("db")
 	dbCfg.AddConfigPath("./resources/db/")
+	dbCfg.AddConfigPath("./db/")
 	dbCfg.AddConfigPath("../resources/db/")
 
 	// Set Default and env based variables ..

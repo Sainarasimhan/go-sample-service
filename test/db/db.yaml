@@ -10,4 +10,4 @@ DB:
   MaxConnections: 10
   Log:
     Level: "Debug"
-    Format: "json"
+    Format: "console"

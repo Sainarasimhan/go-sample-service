@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	log "github.com/Sainarasimhan/Logger"
 	svcerr "github.com/Sainarasimhan/go-error/err"
+	log "github.com/Sainarasimhan/sample/pkg/log"
 	"github.com/lib/pq"
 	"go.opentelemetry.io/otel/api/trace"
 )
 
 type commonMiddlware struct {
 	Repository
-	*log.Logger
+	log.Logger
 	ot trace.Tracer
 }
 
@@ -22,9 +22,9 @@ type MiddleWare func(Repository) Repository
 //CommonMiddleware -  Does below functionalities
 // - convert any DB error to standard error
 // - Sets up Opentelemetry tracer for DB calls
-func CommonMiddleware(lg *log.Logger, ot trace.Tracer) MiddleWare {
+func CommonMiddleware(lg log.Logger, ot trace.Tracer) MiddleWare {
 	return func(next Repository) Repository {
-		lg.Debug()("Wrapped Repo with ErrorMiddelware")
+		lg.Debugw(context.Background(), "Middleware", "Wrapped Repo with ErrorMiddelware")
 		return &commonMiddlware{Repository: next, Logger: lg, ot: ot}
 	}
 }
@@ -65,7 +65,7 @@ func (cm *commonMiddlware) List(ctx context.Context, req Request) ([]Details, er
 
 func (cm *commonMiddlware) mapPostgresError(msg string, err error) (serr error) {
 	if perr, ok := err.(*pq.Error); ok {
-		cm.Debug("error", perr.Error())(fmt.Sprintf("Detailed error %#v", perr))
+		cm.Debug(context.Background(), perr.Error(), fmt.Sprintf("Detailed error %#v", perr))
 		detail := svcerr.DebugInfo{
 			Detail: msg + "Detail:" + perr.Message,
 		}

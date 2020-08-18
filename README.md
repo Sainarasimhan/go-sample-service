@@ -11,6 +11,7 @@
   Non-Functional logic are implemented as middelwares e.g. logging, error handling in each major component. 
 
   uses logging, error handling and config package from other git repos, along with few third party packages. 
+  Dependency Injection done with 'wire', dependencies are resolved and augo-generated at compile time.
 
 ## TODO
  - Add Testing for individual packages 
@@ -22,3 +23,14 @@
  - GCP Error Reporting - Setup GCP account to use error reporting
    - GOOGLE_APPLICATION_CREDENTIALS env var should be set with service account details
  - Protobuf generation - use make.sh to generate protobuf and grpc packages.
+
+ ## How-To
+ - Run commands 
+   - "go generate cmd/main.go"
+   - "go run cmd/main-wire_gen.go"
+ - Test Commands
+   - "go generate test/test.go"
+   - "go test ./..."
+ - Build Docker Image 
+   - TODO
+

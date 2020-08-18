@@ -8,28 +8,26 @@ import (
 	"cloud.google.com/go/errorreporting"
 	log "github.com/Sainarasimhan/Logger"
 	svcerr "github.com/Sainarasimhan/go-error/err"
-	repo "github.com/Sainarasimhan/sample/pkg/repository"
+	newlog "github.com/Sainarasimhan/sample/pkg/log"
 	"go.opentelemetry.io/otel/api/metric"
 
 	"github.com/Sainarasimhan/sample/pb"
 	Repo "github.com/Sainarasimhan/sample/pkg/repository"
 )
 
-//Service - interface defines the core service
+// Service - interface defines the core service
+// Support Get,List,Create,Update,Delete
 type Service interface {
 	Create(context.Context, CreateRequest) error
 	CreateAsync(context.Context, CreateRequest) error
 	List(context.Context, ListRequest) (Details, error)
-}
-
-// Publisher - interface to send domain events
-type Publisher interface {
-	Publish(context.Context, Event) error
+	// Get,Update,Delete methods need to be added.
 }
 
 //ListRequest - Request for List
 type ListRequest struct {
 	*pb.ListRequest
+	*log.Logger
 }
 
 //Details - Response for List
@@ -40,19 +38,25 @@ type Details struct {
 //CreateRequest  - Request for Create
 type CreateRequest struct {
 	*pb.CreateRequest
+	*log.Logger
+}
+
+// Publisher - interface to send domain events
+type Publisher interface {
+	Publish(context.Context, Event) error
 }
 
 // Event - Structure to send event update
 type Event struct {
-	Msg    string
-	Param1 string
+	Msg    string `json:"Message"`
+	Param1 string `json:"Param1"`
 }
 
 // type implementing Service and holds all data for performing business logic
 type sampleService struct {
 	Repo.Repository
 	Publisher
-	*log.Logger
+	newlog.Logger
 	er                 *errorreporting.Client
 	conWrkrs           int
 	createCh           chan (CreateRequest)
@@ -63,7 +67,7 @@ type sampleService struct {
 type Option func(*sampleService)
 
 // New - Creates new Service object
-func New(lg *log.Logger, repo Repo.Repository, opt ...Option) (Service, error) {
+func New(lg newlog.Logger, repo Repo.Repository, opt ...Option) (Service, error) {
 	s := sampleService{
 		Logger:     lg,
 		Repository: repo,
@@ -84,7 +88,7 @@ func New(lg *log.Logger, repo Repo.Repository, opt ...Option) (Service, error) {
 	svc := ErrorMiddleware(lg, s.er)(&s)
 	svc = InstrumentingMiddleware(s.createCnt, s.listCnt)(svc)
 
-	s.Info("Action", "NewService")("created new service type")
+	s.Infow(context.Background(), "Action", "NewService", "msg", "created new service type")
 	return svc, nil
 }
 
@@ -123,15 +127,13 @@ func (s *sampleService) Create(ctx context.Context, cr CreateRequest) error {
 
 	_, err := s.Insert(ctx, rReq)
 	if err != nil {
-		s.Error("req", cr.String())("Error in Creating entry - %s", err.Error())
+		s.Errorw(ctx, "Error in Creating entry", err)
 		return err
 	}
-	s.Info("req", cr.String())("Successfuly Created entry")
+	s.Info(ctx, "Successfuly Created entry")
 
 	//Publish Create Event
-	if s.Publisher != nil {
-		s.Publisher.Publish(ctx, cr.publishMsg())
-	}
+	s.Publish(ctx, cr.publishMsg())
 	return nil
 
 }
@@ -140,9 +142,9 @@ func (s *sampleService) Create(ctx context.Context, cr CreateRequest) error {
 func (s *sampleService) CreateAsync(ctx context.Context, cr CreateRequest) error {
 	select {
 	case s.createCh <- cr:
-		s.Info("req", cr.String())("Request pusehd to Async Queue")
+		s.Info(ctx, "Request pusehd to Async Queue")
 	case <-ctx.Done():
-		s.Error("req", cr.String())("Context Timeout, canceling request")
+		s.Error(ctx, "Context Timeout, canceling request")
 		return svcerr.DeadlineExceeded("Request Deadline Exceeded")
 	}
 	return nil
@@ -151,7 +153,7 @@ func (s *sampleService) CreateAsync(ctx context.Context, cr CreateRequest) error
 // Async workers to create entries
 func (s *sampleService) crWorkers() {
 	for cr := range s.createCh {
-		s.Debug("req", cr.String())("Received Request from Async channel")
+		s.Debug(context.Background(), "Received Request from Async channel")
 		if err := s.Create(context.Background(), cr); err != nil {
 			// Report error happened during async creation
 			if s.er != nil {
@@ -170,10 +172,10 @@ func (s *sampleService) List(ctx context.Context, lr ListRequest) (resp Details,
 
 	dtls, err := s.Repository.List(ctx, rReq)
 	if err != nil {
-		s.Error("req", lr.String())("Error in Getting entry - %s", err.Error())
+		s.Errorw(ctx, "Error in Getting entry - %s", err.Error())
 		return
 	}
-	s.Info("req", lr.String(), "No_entries", strconv.Itoa(len(dtls)))("Got Details")
+	s.Infow(ctx, "Retreived entries -", strconv.Itoa(len(dtls)))
 	for _, d := range dtls {
 		entry := &pb.Detail{
 			ID:     int32(d.ID),
@@ -187,8 +189,15 @@ func (s *sampleService) List(ctx context.Context, lr ListRequest) (resp Details,
 	return
 }
 
+func (s *sampleService) Publish(ctx context.Context, evt Event) {
+	//Publish Event
+	if s.Publisher != nil {
+		go s.Publisher.Publish(ctx, evt)
+	}
+}
+
 /* Helper Funcs */
-func (cr *CreateRequest) repoRequest() repo.Request {
+func (cr *CreateRequest) repoRequest() Repo.Request {
 
 	return Repo.Request{
 		ID:     int(cr.GetID()),
@@ -210,7 +219,7 @@ func (cr *CreateRequest) publishMsg() Event {
 	}
 }
 
-func (lr *ListRequest) repoRequest() repo.Request {
+func (lr *ListRequest) repoRequest() Repo.Request {
 	return Repo.Request{
 		ID: int(lr.GetID()),
 	}

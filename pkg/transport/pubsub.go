@@ -1,139 +1,92 @@
 package transport
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
-	"strconv"
 
-	"cloud.google.com/go/pubsub"
-	log "github.com/Sainarasimhan/Logger"
 	"github.com/Sainarasimhan/sample/pb"
 	"github.com/Sainarasimhan/sample/pkg/endpoints"
+	log "github.com/Sainarasimhan/sample/pkg/log"
 	"github.com/Sainarasimhan/sample/pkg/service"
 	"github.com/go-kit/kit/endpoint"
+	"gocloud.dev/pubsub"
+	_ "gocloud.dev/pubsub/gcppubsub"
 )
 
-// Support pubsub as a transport
-// Listen for Msgs and invoke endpoints with proper request
-// Specific to GCP - pub/sub
+// Implementation with google cloud SDK Pub/Sub
 
-type PubSubClient interface {
-	Receive() error //
-	Close()
+type psClient struct {
+	*pubsub.Subscription
+	handler pubsubCallBack
+	*pubsub.Topic
+	log.Logger
 }
 
 type pubsubCallBack func(context.Context, *pubsub.Message)
-type DecodeReqFunc func(context.Context, *log.Logger, *pubsub.Message) (interface{}, error)
+type DecodeReqFunc func(context.Context, log.Logger, *pubsub.Message) (interface{}, error)
 
-type psClient struct {
-	*pubsub.Client
-	*pubsub.Subscription
-	*pubsub.Topic
-	handler pubsubCallBack
-	*log.Logger
-	//timeout
-}
+// NewSubClient returns gocloud subscription client
+// TODO pass tracer
+func NewSubClient(url string, lg log.Logger, e endpoints.Endpoints) *psClient {
 
-type PubSubCfg struct {
-	ProjectID    string
-	Topic        string
-	Subscription string
-}
-
-//NewSub - creates pubsub client
-func NewSub(cfg PubSubCfg, lg *log.Logger, e endpoints.Endpoints) PubSubClient {
-	client, err := pubsub.NewClient(context.Background(), cfg.ProjectID)
+	ctx := context.Background()
+	subscription, err := pubsub.OpenSubscription(ctx,
+		url)
+	//"gcppubsub://projects/my-project/subscriptions/my-subscription")
 	if err != nil {
-		lg.Println(err)
-		return nil
+		lg.Errorw(ctx, "PubSub", "Creation", "err", err)
 	}
 
-	//create instance of pubsub type
-	pc := psClient{Client: client,
-		Logger: lg}
-
-	// Create Subscription
-	if cfg.Subscription != "" {
-		pc.Subscription = client.Subscription(cfg.Subscription)
-		// form Handler
-		pc.createPubSubHndlr(decodePubSubReq, e.Create)
+	// create local type
+	ps := psClient{
+		Subscription: subscription,
+		Logger:       lg,
+		handler:      createSubHndlr(decodeSubReq, lg, e.Create),
 	}
+	return &ps
 
-	return &pc
 }
 
-func NewPublishClient(lg *log.Logger, cfg PubSubCfg) service.Publisher {
-
-	client, err := pubsub.NewClient(context.Background(), cfg.ProjectID)
-	if err != nil {
-		lg.Println(err)
-		return nil
-	}
-
-	//create instance of pubsub type
-	pc := psClient{Client: client,
-		Logger: lg}
-
-	// Create Subscription
-	if cfg.Topic != "" {
-		pc.Topic = client.Topic(cfg.Topic)
-	}
-
-	fn := func(ctx context.Context, request interface{}) (response interface{}, err error) {
-
-		msg, _ := request.(*pubsub.Message)
-		res := pc.Topic.Publish(ctx, msg)
-
-		// Handle response async - log any error
-		go func(res *pubsub.PublishResult) {
-			msgID, err := res.Get(ctx)
-			if err != nil {
-				lg.Error()(err.Error())
-			} else {
-				lg.Info("PubSub", "Publish")("Message Sent %v \n", msgID)
-			}
-
-		}(res)
-		return nil, nil
-
-	}
-	//create instance of pubsub type
-	return &endpoints.Endpoints{Pub: fn}
-}
-
-func (p *psClient) Receive() error {
-	if p.Subscription == nil {
+func (s *psClient) Receive() (err error) {
+	if s.Subscription == nil {
 		return errors.New("Invalid Subscription")
 	}
-	err := p.Subscription.Receive(context.Background(), p.handler)
-	if err != nil {
-		p.Println(err)
+
+	for {
+		ctx := context.Background() // TODO - Setup up context values
+		msg, err := s.Subscription.Receive(ctx)
+		if err != nil {
+			s.Errorw(ctx, "PubSub", "Subscription", "err", err)
+			return err
+		}
+
+		go func() {
+			s.handler(ctx, msg)
+		}()
 	}
-	return err
 }
 
-func (p *psClient) Close() {
-	p.Subscription.Delete(context.Background())
-	p.Client.Close()
+func (s *psClient) Shutdown() {
+	if s.Subscription != nil {
+		s.Subscription.Shutdown(context.Background())
+	}
 }
 
-func decodePubSubReq(ctx context.Context, lg *log.Logger, m *pubsub.Message) (request interface{}, err error) {
+func decodeSubReq(ctx context.Context, lg log.Logger, m *pubsub.Message) (request interface{}, err error) {
 	// Convert pub sub message to protobuf message
 	var (
 		msg   = &pb.CreateRequest{}
 		epReq = endpoints.CreateRequest{}
 	)
-	id, _ := strconv.Atoi(m.ID)
-	msg.ID = int32(id)
 
-	msg.Param1 = m.Attributes["Param1"]
-	msg.Param2 = m.Attributes["Param2"]
-	msg.Param3 = m.Attributes["Param3"]
-	msg.TransID = m.Attributes["TransID"]
+	// Do Json Decoding of msg
+	json.NewDecoder(bytes.NewReader(m.Body)).Decode(msg)
 
 	// validate request
 	if err = ValidateRequest(msg); err != nil {
-		lg.Println(err)
+		lg.Error(ctx, err)
 		return msg, err
 	}
 
@@ -142,11 +95,11 @@ func decodePubSubReq(ctx context.Context, lg *log.Logger, m *pubsub.Message) (re
 	return epReq, nil
 }
 
-func (c *psClient) createPubSubHndlr(d DecodeReqFunc, e endpoint.Endpoint) {
-	c.handler = func(ctx context.Context, m *pubsub.Message) {
+func createSubHndlr(d DecodeReqFunc, lg log.Logger, e endpoint.Endpoint) pubsubCallBack {
+	handler := func(ctx context.Context, m *pubsub.Message) {
 
 		// Decode message
-		r, err := d(ctx, c.Logger, m)
+		r, err := d(ctx, lg, m)
 		if err != nil {
 			// Log error on receiving wrong event
 			m.Ack()
@@ -156,10 +109,53 @@ func (c *psClient) createPubSubHndlr(d DecodeReqFunc, e endpoint.Endpoint) {
 		_, err = e(ctx, r)
 		if err != nil {
 			// if not processed, message will be picked up again
+			if m.Nackable() {
+				m.Nack()
+			}
 			return // log error
 		}
 
 		//Acknowledge message
 		m.Ack()
+	}
+	return handler
+}
+
+// NewPubClient Publish Client
+func NewPubClient(lg log.Logger, topicURL string) service.Publisher {
+
+	ctx := context.Background()
+	topic, err := pubsub.OpenTopic(ctx,
+		topicURL)
+	//"gcppubsub://projects/my-project/subscriptions/my-subscription")
+	if err != nil {
+		lg.Errorw(ctx, "Pub", "Creation", "err", err)
+	}
+	// Topic not closed .. if needed call topic.Shutdown()
+
+	// create local type
+	pc := psClient{
+		Logger: lg,
+		Topic:  topic,
+	}
+
+	//create instance of pubsub type
+	return &endpoints.Endpoints{Pub: pc.Endpoint()}
+}
+
+//Endpoint - Creates endpoint from pubclient
+func (pc *psClient) Endpoint() endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+
+		msg, _ := request.(*pubsub.Message)
+		err = pc.Topic.Send(ctx, msg)
+
+		if err != nil {
+			pc.Error(ctx, err)
+		} else {
+			pc.Infow(ctx, "PubSub", "Publish Message Sent")
+		}
+
+		return nil, err
 	}
 }

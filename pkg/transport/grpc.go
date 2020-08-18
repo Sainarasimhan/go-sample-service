@@ -40,6 +40,7 @@ func NewGRPCServer(endpoints endpoints.Endpoints) pb.SampleServer {
 
 // Create - gRPC handler for Create requests
 func (g *grpcServer) Create(ctx context.Context, cr *pb.CreateRequest) (*empty.Empty, error) {
+	ctx = SetGRPCLogContext(ctx, cr.GetTransID(), CREATE)
 	_, _, err := g.create.ServeGRPC(ctx, cr)
 	if err != nil {
 		return nil, err
@@ -50,7 +51,7 @@ func (g *grpcServer) Create(ctx context.Context, cr *pb.CreateRequest) (*empty.E
 
 // List - gRPC handler for List
 func (g *grpcServer) List(ctx context.Context, lr *pb.ListRequest) (*pb.Details, error) {
-
+	ctx = SetGRPCLogContext(ctx, lr.GetTransID(), LIST)
 	_, resp, err := g.list.ServeGRPC(ctx, lr)
 	if err != nil {
 		return nil, err
@@ -61,7 +62,8 @@ func (g *grpcServer) List(ctx context.Context, lr *pb.ListRequest) (*pb.Details,
 
 // ListStream - gRPC handler for List stream
 func (g *grpcServer) ListStream(lr *pb.ListRequest, strm pb.Sample_ListStreamServer) error {
-	_, resp, err := g.list.ServeGRPC(context.Background(), lr)
+	ctx := SetGRPCLogContext(context.Background(), lr.GetTransID(), LIST)
+	_, resp, err := g.list.ServeGRPC(ctx, lr)
 	if err != nil {
 		return err
 	}
@@ -83,7 +85,10 @@ func DecodeGRPCCreateRequest(_ context.Context, grpcReq interface{}) (interface{
 	if err := ValidateRequest(req); err != nil {
 		return nil, err
 	}
-	return endpoints.CreateRequest{Cr: service.CreateRequest{CreateRequest: req}}, nil
+	return endpoints.CreateRequest{
+		Cr: service.CreateRequest{
+			CreateRequest: req},
+	}, nil
 }
 
 // DecodeGRPCListRequest -- Decode from gRPC to endpoint request
@@ -96,7 +101,10 @@ func DecodeGRPCListRequest(_ context.Context, grpcReq interface{}) (interface{},
 		return nil, err
 	}
 
-	return endpoints.ListRequest{Lr: service.ListRequest{ListRequest: req}}, nil
+	return endpoints.ListRequest{
+		Lr: service.ListRequest{
+			ListRequest: req},
+	}, nil
 }
 
 // EncodeGRPCCreateResponse - stdr Encoding

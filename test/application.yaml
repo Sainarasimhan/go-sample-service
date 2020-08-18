@@ -1,5 +1,6 @@
 #All Config Params can be passed from env vars
 Sample:
+  Concurrent-Writes: 10
   http-API:
       Name: "localhost"
       Port: 9085 
@@ -12,6 +13,11 @@ Sample:
       Secure: false
       Cert:
       Key:
+  PubSub:
+      Enable: false
+      SubURL: "gcppubsub://projects/my-gke-36/subscriptions/sample-go"
+      PubURL: "gcppubsub://projects/my-gke-36/topics/sample-notify"
+ # ErrorReportProject: "my-gke-36"
   Prom-API:
       Name: ""
       Port: 8080
@@ -25,15 +31,8 @@ Sample:
       Secure: false
       Cert:
       Key:
-  PubSub:
-      Enable: false
-      SubURL: "gcppubsub://projects/my-gke-36/subscriptions/sample-go"
-      PubURL: "gcppubsub://projects/my-gke-36/topics/sample-notify"
- # ErrorReportProject: "my-gke-36"
-  Concurrent-Writes: 10
-  
   Log:
       Level: "Info"
-      Format: "json"
+      Format: "console"
 
 

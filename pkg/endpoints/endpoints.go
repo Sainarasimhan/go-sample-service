@@ -2,15 +2,16 @@ package endpoints
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime/pprof"
 	"time"
 
-	"cloud.google.com/go/pubsub"
 	"github.com/Sainarasimhan/sample/pkg/service"
+	"gocloud.dev/pubsub"
 
-	log "github.com/Sainarasimhan/Logger"
+	log "github.com/Sainarasimhan/sample/pkg/log"
 	"github.com/go-kit/kit/circuitbreaker"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/ratelimit"
@@ -53,25 +54,25 @@ type ListResponse struct {
 // Instumenting Middleware - to capture request latency in metric instruments
 // Circuit breaker middleware - CB functionality with default settings.
 // Rate Limiting Middleware - currently allows max 10 requests per sec. No Throttling setup atm
-func New(svc service.Service, lg *log.Logger, latency metric.Float64ValueRecorder) Endpoints { //Pass Tracer and Metrics Objects
+func New(svc service.Service, lg log.Logger, latency metric.Float64ValueRecorder) Endpoints { //Pass Tracer and Metrics Objects
 
 	createEndpoint := MakeCreateEndpoint(svc)
 	createEndpoint = LoggingMiddleware(lg)(createEndpoint)
 	createEndpoint = InstrumentingMiddelware(latency)(createEndpoint)
 	createEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(createEndpoint)
-	createEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 10))(createEndpoint) //Max 10 requests?
+	createEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second/10), 10))(createEndpoint) //Max 10 requests?
 
 	crAsyncEndpoint := MakeCreateAsyncEndpoint(svc)
 	crAsyncEndpoint = LoggingMiddleware(lg)(crAsyncEndpoint)
 	crAsyncEndpoint = InstrumentingMiddelware(latency)(crAsyncEndpoint)
 	crAsyncEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(crAsyncEndpoint)
-	crAsyncEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 10))(crAsyncEndpoint) //Max 10 requests?
+	crAsyncEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second/10), 10))(crAsyncEndpoint) //Max 10 requests?
 
 	listEndpoint := MakeListEndpoint(svc)
 	listEndpoint = LoggingMiddleware(lg)(listEndpoint)
 	listEndpoint = InstrumentingMiddelware(latency)(listEndpoint)
 	listEndpoint = circuitbreaker.Gobreaker(gobreaker.NewCircuitBreaker(gobreaker.Settings{}))(listEndpoint)
-	listEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second), 200))(listEndpoint)
+	listEndpoint = ratelimit.NewErroringLimiter(rate.NewLimiter(rate.Every(time.Second/500), 500))(listEndpoint)
 
 	return Endpoints{
 		Create:      createEndpoint,
@@ -119,15 +120,17 @@ type Endpoints struct {
 	Pub         endpoint.Endpoint
 }
 
-// Do - Implement Publish Events
+// Publish - Implement Publish Events
 func (e *Endpoints) Publish(ctx context.Context, evt service.Event) error {
 
 	// Covert service event into PubSub Message
-	attr := make(map[string]string, 1)
-	attr["Param1"] = evt.Param1 // Map attributes
+	body, _ := json.Marshal(evt)
+
 	m := pubsub.Message{
-		Data:       []byte(evt.Msg),
-		Attributes: attr,
+		Body: body,
+		Metadata: map[string]string{
+			"Param1": evt.Param1,
+		},
 	}
 	_, err := e.Pub(ctx, &m)
 	return err
