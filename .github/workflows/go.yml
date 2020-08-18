@@ -28,9 +28,11 @@ jobs:
         go mod tidy
 
     - name: Build
-      run: go generate cmd/main.go
-           go build cmd/main-wire_gen.go
+      run: |
+        go generate cmd/main.go
+        go build cmd/main-wire_gen.go
 
     - name: Test
-      run: go test generate test/test.go
-           go test test/sample_test.go
+      run: |
+        go test generate test/test.go
+        go test test/sample_test.go
