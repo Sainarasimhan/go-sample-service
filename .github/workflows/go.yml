@@ -26,11 +26,13 @@ jobs:
       run: |
         go get -v -t -d ./...
         go mod tidy
+        go get github.com/google/wire/cmd/wire
 
     - name: Build
       run: |
-        go generate cmd/main.go
+        wire gen -output_file_prefix main- main.go
         go build cmd/main-wire_gen.go
+        
 
     - name: Test
       run: |
