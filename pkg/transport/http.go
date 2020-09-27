@@ -13,9 +13,10 @@ import (
 	svcerr "github.com/Sainarasimhan/go-error/err"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
+	otelhttp "go.opentelemetry.io/contrib/instrumentation/net/http/httptrace"
 	"go.opentelemetry.io/otel/api/correlation"
 	"go.opentelemetry.io/otel/api/trace"
-	"go.opentelemetry.io/otel/plugin/httptrace"
+	otelcode "go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -127,7 +128,8 @@ func errorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
 
 	// Set error code in the span
 	if span := trace.SpanFromContext(ctx); span != nil {
-		span.SetStatus(svcerr.Code(err), http.StatusText(se.Rest.Code))
+		var c otelcode.Code = otelcode.Code(int(svcerr.Code(err)))
+		span.SetStatus(c, http.StatusText(se.Rest.Code))
 	}
 
 }
@@ -147,7 +149,7 @@ func HTTPOpenTMTrace(tr trace.Tracer) httptransport.ServerOption {
 
 	serverBefore := httptransport.ServerBefore(
 		func(ctx context.Context, req *http.Request) context.Context {
-			attrs, entries, spanCtx := httptrace.Extract(req.Context(), req)
+			attrs, entries, spanCtx := otelhttp.Extract(req.Context(), req)
 
 			req = req.WithContext(correlation.ContextWithMap(req.Context(), correlation.NewMap(correlation.MapUpdate{
 				MultiKV: entries,

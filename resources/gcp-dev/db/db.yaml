@@ -2,7 +2,7 @@ DB:
   Driver: "postgres"
   #HostName: "localhost"
   #Docker Config
-  HostName: "host.docker.internal"
+  HostName: "10.79.48.3" # GCP postgres SQL IP
   Database: "postgres"
   Port: "5432"
   UserName: "postgres"

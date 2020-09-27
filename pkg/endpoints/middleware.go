@@ -7,8 +7,8 @@ import (
 
 	log "github.com/Sainarasimhan/sample/pkg/log"
 	"github.com/go-kit/kit/endpoint"
-	"go.opentelemetry.io/otel/api/kv"
 	"go.opentelemetry.io/otel/api/metric"
+	"go.opentelemetry.io/otel/label"
 )
 
 /*middlware to perfrom below functionality
@@ -37,7 +37,7 @@ func InstrumentingMiddelware(duration metric.Float64ValueRecorder) endpoint.Midd
 		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 			defer func(begin time.Time) {
 				//duration.With("method", "endpoint", "Success", fmt.Sprint(err == nil)).Observe(time.Since(begin).Seconds())
-				duration.Record(ctx, time.Since(begin).Seconds(), kv.String("Success", fmt.Sprint(err == nil)))
+				duration.Record(ctx, time.Since(begin).Seconds(), label.String("Success", fmt.Sprint(err == nil)))
 			}(time.Now())
 			response, err = e(ctx, request)
 			return

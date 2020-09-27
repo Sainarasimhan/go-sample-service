@@ -1,0 +1,33 @@
+FROM goms:1.13
+
+RUN mkdir -p /go/src/ibcm-locations-service/
+WORKDIR   /go/src/ibcm-locations-service/
+
+ADD ./src/ ./src
+ADD ./resources/ ./resources
+ADD go.mod ./
+ADD go.sum ./
+COPY ssh/ /root/.ssh/
+
+ENV CGO_CFLAGS=-I/usr/include/
+ENV CGO_LDFLAGS=-L/usr/lib/x86_64-linux-gnu/odbc/
+ENV GO111MODULE=on
+
+RUN git config --global --add url."git@github.lbg.eu-gb.bluemix.net:".insteadOf "https://github.lbg.eu-gb.bluemix.net/"
+#RUN go mod verify
+#RUN go1.13 get ./...
+
+#RUN go build -ldflags "-X ibcm-locations-service/src/com/lbg/ibcm/location/appl.Branch=`/usr/local/bin/git rev-parse --abbrev-ref HEAD` -X ibcm-locations-service/src/com/lbg/ibcm/location/appl.CommitID=`/usr/local/bin/git rev-list -1 HEAD`" src/com/lbg/ibcm/location/cmd/main.go -o appl
+RUN go build src/com/lbg/ibcm/location/LocationApp.go
+
+#FROM go-base:latest
+COPY --from=0 /go/src/ibcm-locations-service/resources/ ./appl/resources/
+COPY --from=0 /go/src/ibcm-locations-service/LocationApp ./appl/
+
+ENV ODBCINI ./resources/db-config/odbc.ini
+ENV DB2DSDRIVER_CFG_PATH ./resources/db-config/
+#ENV TERM xterm
+
+WORKDIR ./appl/
+
+CMD ["./LocationApp"]

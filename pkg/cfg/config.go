@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
@@ -98,10 +99,11 @@ func Init() (cfg *Cfg, err error) {
 func getSvcCfg(cfg *Cfg) (err error) {
 
 	// Read From config file
+	resPath := "resources/" + os.Getenv("APPENV") + "/"
 	viper.SetConfigName("application")
-	viper.AddConfigPath("./resources/")
-	viper.AddConfigPath("../resources/")
-	viper.AddConfigPath("../../resources/")
+	viper.AddConfigPath("./" + resPath)
+	viper.AddConfigPath("../" + resPath)
+	viper.AddConfigPath("../../" + resPath)
 
 	err = viper.ReadInConfig()
 	if err != nil {
@@ -137,10 +139,11 @@ func getDBCfg(cfg *Cfg) (err error) {
 	// Create DB specific viper
 	dbCfg := viper.New()
 	// Read from DB2 file
+	dbPath := "resources/" + os.Getenv("APPENV") + "/db/"
 	dbCfg.SetConfigName("db")
-	dbCfg.AddConfigPath("./resources/db/")
+	dbCfg.AddConfigPath("./" + dbPath)
+	dbCfg.AddConfigPath("../" + dbPath)
 	dbCfg.AddConfigPath("./db/")
-	dbCfg.AddConfigPath("../resources/db/")
 
 	// Set Default and env based variables ..
 	dbCfg.SetEnvPrefix("Sample")

@@ -23,19 +23,20 @@ import (
 	"github.com/Sainarasimhan/sample/pkg/service"
 	"github.com/Sainarasimhan/sample/pkg/transport"
 	"github.com/google/wire"
+	grpcotel "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc"
 	"go.opentelemetry.io/otel/api/global"
-	"go.opentelemetry.io/otel/api/kv"
+	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/trace"
-	metricstdout "go.opentelemetry.io/otel/exporters/metric/stdout"
-	"go.opentelemetry.io/otel/exporters/trace/stdout"
-	"go.opentelemetry.io/otel/plugin/grpctrace"
+	"go.opentelemetry.io/otel/label"
 	"go.opentelemetry.io/otel/sdk/metric/controller/push"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
-	"go.opentelemetry.io/otel/api/metric"
+	gcpmexporter "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric"
+	gcpexporter "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
+	metricstdout "go.opentelemetry.io/otel/exporters/stdout"
 )
 
 var (
@@ -139,69 +140,108 @@ func ProvideLog(cfg *config.Cfg) (lg log.Logger) {
 // TODO - setup Tracer and Metrics exported based on config
 func ProvideTracer(lg log.Logger) (ot OpenTelemetryExporters, cleanup func(), err error) {
 
-	ctx := context.Background()
+	var (
+		ctx = context.Background()
+		// support tracers based on cfg
+		exp    = "gcp" // TODO make it config item
+		flush  = func() {}
+		pusher *push.Controller
+	)
+
+	switch exp {
+	case "gcp":
+
+		// Exporter Options
+		errlg := func(err error) {
+			lg.Error(ctx, "Received error from gcp metrics exporter", err)
+		}
+		mopts := []gcpmexporter.Option{
+			gcpmexporter.WithInterval(30 * time.Second),
+			gcpmexporter.WithOnError(errlg),
+			gcpmexporter.WithProjectID("my-gke-36"),
+		}
+		topts := []gcpexporter.Option{
+			gcpexporter.WithProjectID("my-gke-36"),
+			gcpexporter.WithOnError(errlg),
+		}
+		// GCP stackdriver trace exporter
+		_, flush, err = gcpexporter.InstallNewPipeline(topts,
+			sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.ProbabilitySampler(.1)}),
+		)
+		if err != nil {
+			lg.Error(ctx, err)
+			return
+		}
+
+		// GCP stackdriver metrics exporter
+		pusher, err = gcpmexporter.InstallNewPipeline(mopts)
+		if err != nil {
+			lg.Error(ctx, "failed to initialize gcp metric exporter %v", err)
+			return
+		}
+	case "stdout":
+		// Create stdout exporter to be able to retrieve the collected spans.
+		var (
+			exporter *metricstdout.Exporter
+			tp       *sdktrace.Provider
+		)
+		exporter, err = metricstdout.NewExporter(metricstdout.WithPrettyPrint())
+		if err != nil {
+			lg.Error(ctx, "failed to initialize trace stdout exporter %v", err)
+			return
+		}
+
+		// For the demonstration, use sdktrace.AlwaysSample sampler to sample all traces.
+		// In a production application, use sdktrace.ProbabilitySampler with a desired probability.
+		tp, err = sdktrace.NewProvider(sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
+			sdktrace.WithBatcher(exporter,
+				sdktrace.WithBatchTimeout(30*time.Second),
+				sdktrace.WithMaxExportBatchSize(10),
+			))
+		if err != nil {
+			lg.Error(ctx, "failed to initialize metric stdout exporter %v", err)
+			return
+		}
+		global.SetTraceProvider(tp)
+
+		// stdout exporter
+		popts := []push.Option{push.WithPeriod(30 * time.Second)}
+		opts := []metricstdout.Option{
+			metricstdout.WithQuantiles([]float64{0.5, 0.9, 0.99}),
+			metricstdout.WithPrettyPrint(),
+		}
+		pusher, err = metricstdout.InstallNewPipeline(opts, popts)
+
+	case "zipprom":
+		// zipkin exporter can be setup as below
+		/*exporter, err := otzipkin.NewExporter(*zipkinURL, "Sample")
+		if err != nil {
+			lg.Fatal(err)
+		 }*/
+
+		// Prometheus exporter can be setup as below
+		/*exporter, err := otPrometheus.InstallNewPipeline(otPrometheus.Config{
+			Registerer: prometheus.DefaultRegisterer,
+			Gatherer:   prometheus.DefaultGatherer,
+		})
+		if err != nil {
+			lg.Panicf("failed to initialize prometheus exporter %v", err)
+		}
+		http.HandleFunc("/", exporter.ServeHTTP)
+		*/
+
+	}
 
 	// ---------------- Tracer Setup --------------------
-	// zipkin exporter can be setup as below
-	/*exporter, err := otzipkin.NewExporter(*zipkinURL, "Sample")
-	if err != nil {
-		lg.Fatal(err)
-	}*/
 
-	// For the demonstration, use sdktrace.AlwaysSample sampler to sample all traces.
-	// In a production application, use sdktrace.ProbabilitySampler with a desired probability.
-	/*tp, err := sdktrace.NewProvider(sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
-		sdktrace.WithBatcher(exporter,
-			sdktrace.WithBatchTimeout(5*time.Second),
-			sdktrace.WithMaxExportBatchSize(10),
-		),
-	)*/
-
-	// Create stdout exporter to be able to retrieve the collected spans.
-	exporter, err := stdout.NewExporter(stdout.Options{PrettyPrint: true})
-	if err != nil {
-		lg.Error(ctx, err)
-		return
-	}
-
-	tp, err := sdktrace.NewProvider(sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.ProbabilitySampler(.1)}),
-		sdktrace.WithSyncer(exporter))
-	if err != nil {
-		lg.Error(ctx, err)
-		return
-	}
-
-	global.SetTraceProvider(tp)
-	otTracer := global.Tracer("SampleSvc") // Tracer
+	otTracer := global.TraceProvider().Tracer("gcp.ibcm/sample") // Tracer
 	// ---------------- Tracer Setup End --------------------
-
-	// ---------------- Metrics exporter Setup --------------------
-	// Prometheus exporter can be setup as below
-	/*exporter, err := otPrometheus.InstallNewPipeline(otPrometheus.Config{
-		Registerer: prometheus.DefaultRegisterer,
-		Gatherer:   prometheus.DefaultGatherer,
-	})
-	if err != nil {
-		lg.Panicf("failed to initialize prometheus exporter %v", err)
-	}
-	http.HandleFunc("/", exporter.ServeHTTP)
-	*/
-
-	// stdout exporter
-	pusher, err := metricstdout.InstallNewPipeline(metricstdout.Config{
-		Quantiles:   []float64{0.5, 0.9, 0.99},
-		PrettyPrint: true,
-	}, push.WithPeriod(60*time.Second))
-	if err != nil {
-		lg.Error(ctx, "failed to initialize metric stdout exporter %v", err)
-		return
-	}
-	// ---------------- Metrics exporter Setup End --------------------
 
 	// return Tracer,Pusher along with cleanup
 	ot.OTTracer, ot.Pusher = otTracer, pusher
 	cleanup = func() {
 		pusher.Stop()
+		flush()
 	}
 	return
 }
@@ -209,27 +249,52 @@ func ProvideTracer(lg log.Logger) (ot OpenTelemetryExporters, cleanup func(), er
 // ProvideMetricInstruments - Builds various Metric Instruments.
 func ProvideMetricInstruments(lg log.Logger, ot OpenTelemetryExporters) (mi MetricInstruments, cleanup func(), err error) {
 	ctx := context.Background()
+	//meter := global.Meter("gcp.ibcm/SampleMetrics")
+	meter := ot.Pusher.Provider().Meter("gcp.ibcm/SampleMetrics")
 	// Create Metric Instruments
-	if reqCreateCnt, err := global.Meter("sample").NewInt64Counter("Sample_Svc Create_Requests"); err != nil {
+	/* if reqCreateCnt, err := meter.NewInt64Counter("gcp.SampleSvcCreateRequests"); err != nil {
 		lg.Error(ctx, "Action", "MetricsCreation", "Error creating Metrics %s", err.Error())
 	} else {
-		mi.ReqCreateSvc = reqCreateCnt.Bind(kv.String("request", "createsvc"))
+		mi.ReqCreateSvc = reqCreateCnt.Bind(label.String("request", "createsvc"))
 	}
-	if reqtListCnt, err := global.Meter("sample").NewInt64Counter("Sample_Svc List_Requests"); err != nil {
+	if reqtListCnt, err := meter.NewInt64Counter("gcp.SampleSvcListRequests"); err != nil {
 		lg.Error(ctx, "Action", "MetricsCreation", "Error creating Metrics %s", err.Error())
 	} else {
-		mi.ReqListSvc = reqtListCnt.Bind(kv.String("request", "Listsvc"))
+		mi.ReqListSvc = reqtListCnt.Bind(label.String("request", "Listsvc"))
 	}
-
-	if mi.ReqLatency, err = global.Meter("sample").NewFloat64ValueRecorder("Request Latency"); err != nil {
+	if mi.ReqLatency, err = meter.NewFloat64ValueRecorder("gcp.RequestLatency"); err != nil {
 		lg.Error(ctx, "Action", "MetricsCreation", "Error creating Metrics %s", err.Error())
 	}
 
 	mi.DBMetrics = &repo.Metrics{}
-	batchObserver := global.Meter("Sampple-DB").NewBatchObserver(mi.DBMetrics.DoMetrics())
-	mi.DBMetrics.OpenCnx, _ = batchObserver.NewInt64ValueObserver("Opne DB Connections")
-	mi.DBMetrics.IdleCnx, _ = batchObserver.NewInt64ValueObserver("Idle DB Connections")
-	mi.DBMetrics.IdelClosed, _ = batchObserver.NewInt64SumObserver("Idle Close DB Connections")
+	batchObserver := meter.NewBatchObserver(mi.DBMetrics.DoMetrics())
+	mi.DBMetrics.OpenCnx, err = batchObserver.NewInt64ValueObserver("gcp.db.OpenDBConnections")
+	if err != nil {
+		lg.Error(ctx, "Action", "DBMetricsCreation", "Error creating Metrics", err)
+	}
+	mi.DBMetrics.IdleCnx, err = batchObserver.NewInt64ValueObserver("gcp.db.IdleDBConnections")
+	if err != nil {
+		lg.Error(ctx, "Action", "DBMetricsCreation", "Error creating Metrics", err)
+	}
+	mi.DBMetrics.IdelClosed, err = batchObserver.NewInt64SumObserver("gcp.db.IdleCloseDBConnections")
+	if err != nil {
+		lg.Error(ctx, "Action", "DBMetricsCreation", "Error creating Metrics", err)
+	}
+	*/
+
+	reqCreateCnt := metric.Must(meter).NewInt64Counter("SampleCreateRequets")
+	mi.ReqCreateSvc = reqCreateCnt.Bind(label.String("request", "CreateSvc"))
+
+	reqListCnt := metric.Must(meter).NewInt64Counter("SampleListRequests")
+	mi.ReqListSvc = reqListCnt.Bind(label.String("request", "ListSvc"))
+
+	mi.ReqLatency = metric.Must(meter).NewFloat64ValueRecorder("SampleReqLatency")
+
+	mi.DBMetrics = &repo.Metrics{}
+	batchObserver := metric.Must(meter).NewBatchObserver(mi.DBMetrics.DoMetrics())
+	mi.DBMetrics.OpenCnx = batchObserver.NewInt64ValueObserver("SampleDBOpenConns")
+	mi.DBMetrics.IdleCnx = batchObserver.NewInt64ValueObserver("SampleDBIdleConns")
+	mi.DBMetrics.IdelClosed = batchObserver.NewInt64SumObserver("SampleDBIdleCldConns")
 
 	lg.Info(ctx, "Setup Metric Instruments - CreateCount, ListCount, ReqLatency, DBMetrics")
 	cleanup = func() {
@@ -390,8 +455,8 @@ func ProvideGRPCTransport(deps BaseDependencies, e endpoints.Endpoints) (GRPCTra
 	//Setup Tracer
 	if deps.OTTracer != nil {
 		opts = append(opts,
-			grpc.UnaryInterceptor(grpctrace.UnaryServerInterceptor(global.Tracer("SampleSvc-gRPC"))),
-			grpc.StreamInterceptor(grpctrace.StreamServerInterceptor(global.Tracer("SampleSvc-gRPC"))),
+			grpc.UnaryInterceptor(grpcotel.UnaryServerInterceptor(global.Tracer("SampleSvc-gRPC"))),
+			grpc.StreamInterceptor(grpcotel.StreamServerInterceptor(global.Tracer("SampleSvc-gRPC"))),
 		)
 	}
 

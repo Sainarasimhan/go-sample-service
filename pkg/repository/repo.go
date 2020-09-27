@@ -11,9 +11,9 @@ import (
 
 	svcerr "github.com/Sainarasimhan/go-error/err"
 	log "github.com/Sainarasimhan/sample/pkg/log"
-	"go.opentelemetry.io/otel/api/kv"
 	"go.opentelemetry.io/otel/api/metric"
 	"go.opentelemetry.io/otel/api/trace"
+	"go.opentelemetry.io/otel/label"
 
 	//Postgres Driver
 	_ "github.com/lib/pq"
@@ -311,15 +311,15 @@ func (p *PostgresDB) Close() {
 }
 
 // DoMetrics - Collects metrics as part of opentelemtry batch observer
-func (m *Metrics) DoMetrics() metric.BatchObserverCallback {
+func (m *Metrics) DoMetrics() metric.BatchObserverFunc {
 	return func(ctx context.Context, result metric.BatchObserverResult) {
 		if m.db == nil || m.Logger == nil {
 			return
 		}
 		stats := m.db.Stats()
 		result.Observe(
-			[]kv.KeyValue{
-				kv.String("name", "DB Metrics"),
+			[]label.KeyValue{
+				label.String("name", "DBMetrics"),
 			},
 			m.OpenCnx.Observation(int64(stats.OpenConnections)),
 			m.IdelClosed.Observation(int64(stats.MaxIdleClosed)),

@@ -1,0 +1,39 @@
+#All Config Params can be passed from env vars
+Sample:
+  http-API:
+      Name: "localhost"
+      Port: 9085 
+      Secure: false
+      Cert: 
+      Key:
+  grpc-API:
+      Name: "localhost"
+      Port: 8085
+      Secure: false
+      Cert:
+      Key:
+  Prom-API:
+      Name: ""
+      Port: 8080
+      Secure: false
+      Cert: 
+      Key:
+  Zipkin-API:
+      Name: 
+      Port: 
+      URL:  "http://host.docker.internal:9412/api/v2/spans"
+      Secure: false
+      Cert:
+      Key:
+  PubSub:
+      Enable: false
+      SubURL: "gcppubsub://projects/my-gke-36/subscriptions/sample-go"
+      PubURL: "gcppubsub://projects/my-gke-36/topics/sample-notify"
+ # ErrorReportProject: "my-gke-36"
+  Concurrent-Writes: 10
+  
+  Log:
+      Level: "Info"
+      Format: "console"
+
+
