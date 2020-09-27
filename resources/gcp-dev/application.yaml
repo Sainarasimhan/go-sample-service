@@ -1,13 +1,13 @@
 #All Config Params can be passed from env vars
 Sample:
   http-API:
-      Name: "localhost"
+      Name: ""
       Port: 9085 
       Secure: false
       Cert: 
       Key:
   grpc-API:
-      Name: "localhost"
+      Name: ""
       Port: 8085
       Secure: false
       Cert:
