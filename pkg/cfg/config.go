@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
@@ -122,6 +123,15 @@ func getSvcCfg(cfg *Cfg) (err error) {
 	})
 	if err != nil {
 		return //return err if unmarshal fails
+	}
+
+	// Set PORT for http/grpc
+	transport := os.Getenv("APPTRANSPORT")
+	port, _ := strconv.Atoi(os.Getenv("PORT"))
+	if transport == "HTTP" {
+		cfg.Sample.HTTP.Port = port
+	} else if transport == "GRPC" {
+		cfg.Sample.GRPC.Port = port
 	}
 
 	// yaml validation for log level

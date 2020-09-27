@@ -15,6 +15,8 @@ import (
 // ServiceName - Name to be printed in Log
 const (
 	ServiceName = "Sample"
+	CONSOLE     = "console"
+	JSON        = "json"
 )
 
 const (
@@ -129,7 +131,7 @@ var (
 			LevelKey:       "Level",
 			NameKey:        "Mod",
 			MessageKey:     "Msg",
-			EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
 			EncodeTime:     zapcore.ISO8601TimeEncoder,
 			EncodeDuration: zapcore.StringDurationEncoder,
 		},
@@ -216,6 +218,9 @@ func (c *Cfg) getZapCfg() zap.Config {
 
 	if c.Format != "" {
 		zapCfg.Encoding = c.Format
+	}
+	if CONSOLE == c.Format {
+		zapCfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	}
 	return zapCfg
 
