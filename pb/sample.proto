@@ -2,22 +2,37 @@ syntax = "proto3";
 
 package pb;
 
-import "pb/valid.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/descriptor.proto";
 
 option go_package = "./pb";
 
+//To be Extended with more custom validators
+extend google.protobuf.FieldOptions {
+    bool required = 50000;
+    int32 min = 50001;
+    int32 max = 50002;
+    int32 lmin = 50003;
+    int32 lmax = 50004;
+    StringList allowed = 50005;
+}
+
+message StringList {
+	repeated string list = 1;
+}
+
+
 message CreateRequest {
-    int32 ID       = 1 [(valid.required) = true];
-    string Param1  = 2 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 10];
-    string Param2  = 3 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 50];
-    string Param3  = 4 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 100];
-    string TransID = 5 [(valid.required) = true];
+    int32 ID       = 1 [(required) = true];
+    string Param1  = 2 [(required) = true, (lmin) = 1, (lmax) = 10];
+    string Param2  = 3 [(required) = true, (lmin) = 1, (lmax) = 50];
+    string Param3  = 4 [(required) = true, (lmin) = 1, (lmax) = 100];
+    string TransID = 5 [(required) = true];
 }
 
 message ListRequest {
-    int32 ID       = 1 [(valid.required) = true];
-    string TransID = 2 [(valid.required) = true];
+    int32 ID       = 1 [(required) = true];
+    string TransID = 2 [(required) = true];
 }
 
 message Detail {

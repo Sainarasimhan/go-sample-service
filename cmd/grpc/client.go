@@ -2,28 +2,53 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"log"
+	"net/url"
 	"os"
 	"time"
 
 	"github.com/Sainarasimhan/sample/pb"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
 
 	f := flag.NewFlagSet("gRPC client", flag.ExitOnError)
 	var (
-		num = f.Int("n", 100, "Number of requests")
-		con = f.Int("c", 10, "Concurrent Requests")
+		num  = f.Int("n", 100, "Number of requests")
+		con  = f.Int("c", 10, "Concurrent Requests")
+		host = f.String("host", "http://0.0.0.0:8085", "gRPC Host to connect")
 	)
 	f.Parse(os.Args[1:])
 	//Call grpc Server
 
 	//Create gRPC conn
-	conn, err := grpc.Dial(":8085", grpc.WithInsecure())
+	var (
+		conn *grpc.ClientConn
+		err  error
+		u, _ = url.Parse(*host)
+		opts []grpc.DialOption
+	)
+	if u.Scheme == "http" {
+		opts = append(opts, grpc.WithInsecure())
+	} else {
+		sysRoots, err := x509.SystemCertPool()
+		if err != nil {
+			log.Fatal(err)
+		}
+		cred := credentials.NewTLS(&tls.Config{
+			RootCAs: sysRoots,
+		})
+		opts = append(opts, grpc.WithTransportCredentials(cred))
+		log.Println("Secure connection -", *host)
+	}
+	conn, err = grpc.Dial(*host, opts...)
+
 	if err != nil {
 		log.Fatal(err)
 	}
