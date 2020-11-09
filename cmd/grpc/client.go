@@ -101,7 +101,7 @@ func main() {
 				//Get List
 				_, err := client.List(context.Background(), &lr)
 				if err != nil {
-					//log.Printf("Got Error from List Request %s\n", err)
+					log.Printf("Got Error from List Request %s\n", err)
 					st.fail++
 				} else {
 					//log.Println("response", resp)
@@ -128,7 +128,7 @@ func main() {
 				} */
 			}()
 		}
-		<-time.After(5 * time.Second) //Give some time for calls to finish
+		<-time.After(15 * time.Second) //Give some time for calls to finish
 		// Print stats
 		log.Println("-----------------------")
 		log.Println("Total Calls:", st.total)
@@ -136,7 +136,9 @@ func main() {
 		log.Println("Failure Calls:", st.fail)
 		log.Println("Min Duration:", st.min)
 		log.Println("Max Duration:", st.max)
-		log.Println("Avg Duration:", st.ttime/time.Duration(st.total))
+		if st.total != 0 {
+			log.Println("Avg Duration:", st.ttime/time.Duration(st.total))
+		}
 		log.Println("-----------------------")
 
 	}

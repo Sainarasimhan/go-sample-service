@@ -6,7 +6,8 @@ DB:
   Database: "postgres"
   Port: "5432"
   UserName: "postgres"
-  Password: "postgres"
+ # Password: "postgres"
+  PasswordGCP: "projects/123941618378/secrets/DB-password/versions/1" # Get PWD from GCP Secret Manager
   MaxConnections: 10
   Log:
     Level: "Debug"

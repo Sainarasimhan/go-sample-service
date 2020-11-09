@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package pb;
+
+import "pb/valid.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+option go_package = "./pb";
+
+
+// TODO - Change service to use this PROTO file, which has proper resource/collection URL mappings
+// resource structure - can have properties, sub resources
+
+// Core Messages
+message Sample {
+    int32 sample_id       = 1;
+    string name           = 2 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 10];
+    string description    = 3 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 100];
+    string detail         = 4 [(valid.required) = true, (valid.lmin) = 1, (valid.lmax) = 100];
+}
+
+message Samples {
+    repeated Sample samples = 1;
+}
+
+// Create 
+message CreateSampleRequest {
+    Sample sample    = 1;
+    // Other Fields
+    string trans_id  = 2 [(valid.required) = true];
+}
+
+// List 
+message ListSamplesRequest {
+    //fields with options like range, any start/end combination.
+    string trans_id = 1 [(valid.required) = true];
+    int32 list_size = 2;
+    int32 list_token = 3;
+}
+
+message ListSampleResponse{
+    Samples samples = 1;
+    string next_list_token = 2;
+}
+
+// Get
+message GetSampleRequest { // Get Specific Sample with ID
+    int32 name = 1 [(valid.required) = true];
+    string trans_id = 2 [(valid.required) = true];
+}
+
+// Update
+message UpdateSampleRequest {
+    Sample sample = 1;
+    string trans_id = 2 [(valid.required) = true];
+}
+
+// Delete
+message DeleteSampleRequest {
+    int32 name      = 1 [(valid.required) = true];
+    string trans_id = 2 [(valid.required) = true];
+}
+
+// Service with REST Transcoding
+service SampleService {
+    // Map Create with POST Request
+    rpc Create (CreateSampleRequest) returns(Sample) { 
+        option (google.api.http) = {
+            post: "/v1/Samples"
+            body: "Sample"
+        };
+    };
+
+    // Map List with HTTP Get
+    rpc List (ListSamplesRequest) returns(ListSampleResponse) {
+    };
+    // List Stream  TODO - Add proper Support
+    rpc ListStream (ListSamplesRequest) returns (stream Sample) {};
+
+    // Get
+    rpc Get (GetSampleRequest) returns(Sample) {
+        option (google.api.http) = {
+            get: "/V1/Sample/{ID}"
+        };
+    };
+
+    
+    rpc Update (UpdateSampleRequest) returns (Sample) {};
+    rpc Delete (DeleteSampleRequest) returns (google.protobuf.Empty){};
+    
+}

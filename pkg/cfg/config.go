@@ -82,6 +82,7 @@ type DBCfg struct {
 	Port     int    `config:"Port"     valid:"numeric,required"`
 	UID      string `config:"UserName" valid:"alphanum, required"`
 	Pwd      string `config:"Password" valid:"alphanum, required"`
+	GcpSM    string `config:"PasswordGCP" valid:"required"`
 	MaxConns int    `config:"MaxConnections" valid:"numeric, required"`
 	Log      LogCfg `config:"Log"`
 }
@@ -173,6 +174,12 @@ func getDBCfg(cfg *Cfg) (err error) {
 		})
 	if err != nil {
 		return //return err if unmarshal fails
+	}
+
+	// Get Pwd from GCP KMS
+	cfg.DB.Pwd, err = gcpDBPwd(cfg.DB.GcpSM) // Pass Secret Name
+	if err != nil {
+		return
 	}
 
 	// yaml validation
